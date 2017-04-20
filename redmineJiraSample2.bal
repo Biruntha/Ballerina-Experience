@@ -7,22 +7,32 @@ import org.wso2.ballerina.connectors.redmine;
 function main (string[] args) {
     redmine:ClientConnector redmineConnector = create redmine:ClientConnector(args[0], args[1], args[2]);
     jira:ClientConnector jiraConnector = create jira:ClientConnector(args[3], args[4], args[5]);
-    message redmineResponse;
-    json redmineJSONResponse;
     message jiraResponse;
     json jiraJSONResponse;
 
-    redmineResponse = redmine:ClientConnector.getIssues(redmineConnector, "null", "null", "null", "null", "1", "null", "null", "null", "null", "null", "null");
-    redmineJSONResponse = messages:getJsonPayload(redmineResponse);
+    message redmineResponse = redmine:ClientConnector.getIssues(redmineConnector, "null", "null", "null", "null", "null", "null", "null", "null", "null", "null", "null");
+    json redmineJSONResponse = messages:getJsonPayload(redmineResponse);
     system:println(jsons:toString(redmineJSONResponse));
+
+    message jiraGetIssueTypesResponse = jira:ClientConnector.getIssueTypes(jiraConnector);
+    json jiraGetIssueTypesJSONResponse = messages:getJsonPayload(jiraGetIssueTypesResponse);
+    system:println(jsons:toString(jiraGetIssueTypesJSONResponse));
 
     int issueCount = jsons:getInt(redmineJSONResponse, "$.issues.length()");
     int i = 0;
     while (i < issueCount) {
         string summary = jsons:getString(redmineJSONResponse, "$.issues[" + i + "].subject");
         string description = jsons:getString(redmineJSONResponse, "$.issues[" + i + "].description");
-        string issueTypeId = "10103";
-        string projectId = "10001";
+
+        json var1 = jsons:getJson(jiraGetIssueTypesJSONResponse , "$.[?(@.name=='" +
+                    jsons:getString(redmineJSONResponse, "$.issues[" + i + "].tracker.name") +"')].id");
+        string issueTypeId = jsons:getString(var1 , "$.[0]");
+
+        message jiraGetProjectResponse = jira:ClientConnector.getProject(jiraConnector,
+                       jsons:getString(redmineJSONResponse, "$.issues[" + i + "].project.name"), "null");
+        json jiraGetProjectJSONResponse = messages:getJsonPayload(jiraGetProjectResponse);
+        system:println(jsons:toString(jiraGetProjectJSONResponse));
+        string projectId = jsons:getString(jiraGetProjectJSONResponse, "$.id");
 
         jira:CREATE_ISSUE sample = jsonToStruct_Mapping(projectId, issueTypeId, summary, description);
         system:println(sample.issueUpdates);
@@ -33,8 +43,6 @@ function main (string[] args) {
 
         i = i + 1;
     }
-
-
 }
 
 function jsonToStruct_Mapping(string projectId, string issueTypeId, string summary, string description) (jira:CREATE_ISSUE) {
